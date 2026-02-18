@@ -18,35 +18,37 @@ A comprehensive GitHub Action for deploying container images to Kubernetes or Re
 
 ## Inputs
 
-| Input | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `image` | Yes | - | Container image to deploy (e.g., `us.icr.io/namespace/app:tag`) |
-| `cluster-type` | No | `kubernetes` | Cluster type: `kubernetes` or `openshift` |
-| `kubeconfig` | Conditional | - | Kubeconfig content (base64 encoded or plain text) |
-| `ibmcloud-apikey` | Conditional | - | IBM Cloud API key (for IBM Cloud clusters) |
-| `cluster-name` | Conditional | - | IBM Cloud cluster name (required with `ibmcloud-apikey`) |
-| `cluster-region` | No | `us-south` | IBM Cloud cluster region |
-| `namespace` | No | `default` | Kubernetes namespace for deployment |
-| `deployment-name` | Yes | - | Name of the deployment |
-| `deployment-manifest` | No | - | Path to custom deployment manifest |
-| `container-name` | No | deployment-name | Container name in the deployment |
-| `port` | No | `8080` | Container port to expose |
-| `service-type` | No | `ClusterIP` | Service type: ClusterIP, NodePort, LoadBalancer |
-| `replicas` | No | `1` | Number of replicas |
-| `health-check-path` | No | `/` | HTTP path for health check. Use `/` for root endpoint or specify custom path like `/health` |
-| `health-check-timeout` | No | `300` | Health check timeout in seconds |
-| `enable-probes` | No | `false` | Enable liveness and readiness probes (true/false) |
-| `readiness-probe-path` | No | health-check-path | HTTP path for readiness probe |
-| `liveness-probe-path` | No | health-check-path | HTTP path for liveness probe |
-| `resource-limits-cpu` | No | `500m` | CPU resource limit |
-| `resource-limits-memory` | No | `512Mi` | Memory resource limit |
-| `resource-requests-cpu` | No | `250m` | CPU resource request |
-| `resource-requests-memory` | No | `256Mi` | Memory resource request |
-| `env-vars` | No | - | Environment variables (KEY=VALUE format, one per line) |
-| `create-route` | No | `true` | Create OpenShift route (OpenShift only) |
-| `route-hostname` | No | - | Custom hostname for OpenShift route |
-| `ingress-host` | No | - | Ingress hostname (Kubernetes only) |
-| `ingress-tls` | No | `false` | Enable TLS for ingress |
+| Name | Required | Default | Description |
+|------|----------|---------|-------------|
+| `image` | ✅ | - | Container image to deploy (e.g., `us.icr.io/namespace/app:tag`) |
+| `cluster-type` | ❌ | `kubernetes` | Cluster type: `kubernetes` or `openshift` |
+| `kubeconfig` | ❌* | - | Kubeconfig content (base64 encoded or plain text) |
+| `ibmcloud-apikey` | ❌* | - | IBM Cloud API key (for IBM Cloud clusters) |
+| `cluster-name` | ❌* | - | IBM Cloud cluster name (required with `ibmcloud-apikey`) |
+| `cluster-region` | ❌ | `us-south` | IBM Cloud cluster region |
+| `namespace` | ❌ | `default` | Kubernetes namespace for deployment |
+| `deployment-name` | ✅ | - | Name of the deployment |
+| `deployment-manifest` | ❌ | - | Path to custom deployment manifest |
+| `container-name` | ❌ | deployment-name | Container name in the deployment |
+| `port` | ❌ | `8080` | Container port to expose |
+| `service-type` | ❌ | `ClusterIP` | Service type: ClusterIP, NodePort, LoadBalancer |
+| `replicas` | ❌ | `1` | Number of replicas |
+| `health-check-path` | ❌ | `/` | HTTP path for health check. Use `/` for root endpoint or specify custom path like `/health` |
+| `health-check-timeout` | ❌ | `300` | Health check timeout in seconds |
+| `enable-probes` | ❌ | `false` | Enable liveness and readiness probes (true/false) |
+| `readiness-probe-path` | ❌ | health-check-path | HTTP path for readiness probe |
+| `liveness-probe-path` | ❌ | health-check-path | HTTP path for liveness probe |
+| `resource-limits-cpu` | ❌ | `500m` | CPU resource limit |
+| `resource-limits-memory` | ❌ | `512Mi` | Memory resource limit |
+| `resource-requests-cpu` | ❌ | `250m` | CPU resource request |
+| `resource-requests-memory` | ❌ | `256Mi` | Memory resource request |
+| `env-vars` | ❌ | - | Environment variables (KEY=VALUE format, one per line) |
+| `create-route` | ❌ | `true` | Create OpenShift route (OpenShift only) |
+| `route-hostname` | ❌ | - | Custom hostname for OpenShift route |
+| `ingress-host` | ❌ | - | Ingress hostname (Kubernetes only) |
+| `ingress-tls` | ❌ | `false` | Enable TLS for ingress |
+
+**Note:** ❌* indicates conditionally required - either `kubeconfig` OR (`ibmcloud-apikey` + `cluster-name`) must be provided.
 
 ## Outputs
 
@@ -497,5 +499,3 @@ If pods fail to start with `ImagePullBackOff` or `ErrImagePull`:
 ## License
 
 This project is licensed under the MIT License.
-
-# Made with Bob
