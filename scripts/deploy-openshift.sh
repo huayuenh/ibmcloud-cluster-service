@@ -7,6 +7,9 @@ set -e
 
 # Source common utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Redirect all informational output to stderr so only the URL goes to stdout
+exec 3>&1  # Save stdout
+exec 1>&2  # Redirect stdout to stderr
 source "$SCRIPT_DIR/common.sh"
 
 print_info "Configuring OpenShift-specific resources..."
@@ -27,8 +30,8 @@ if [ "$CREATE_ROUTE" = "true" ]; then
         APP_URL="http://${ROUTE_HOST}"
         print_success "Route created: $APP_URL"
         
-        # Export APP_URL for parent script
-        echo "$APP_URL"
+        # Output URL to stdout (fd 3) for parent script to capture
+        echo "$APP_URL" >&3
     else
         print_warning "Failed to retrieve route host"
     fi

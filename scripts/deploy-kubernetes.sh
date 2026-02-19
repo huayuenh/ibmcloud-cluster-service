@@ -9,6 +9,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
+# Redirect all informational output to stderr so only the URL goes to stdout
+exec 3>&1  # Save stdout
+exec 1>&2  # Redirect stdout to stderr
+
 print_info "Configuring Kubernetes-specific resources..."
 
 # Auto-detect IBM Cloud Ingress subdomain if requested
@@ -104,8 +108,8 @@ EOF
     
     print_success "Ingress created: $APP_URL"
     
-    # Export APP_URL for parent script
-    echo "$APP_URL"
+    # Output URL to stdout (fd 3) for parent script to capture
+    echo "$APP_URL" >&3
 else
     print_info "No ingress host configured, skipping ingress creation"
 fi
