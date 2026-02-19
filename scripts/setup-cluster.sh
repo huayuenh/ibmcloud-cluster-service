@@ -44,7 +44,6 @@ elif [ -n "$IBM_CLOUD_API_KEY" ]; then
         print_info "Getting OpenShift cluster configuration..."
         ibmcloud oc cluster config --cluster "$CLUSTER_NAME" --admin
         handle_error $? "Failed to get OpenShift cluster configuration"
-        
     else
         # Get Kubernetes cluster config
         print_info "Getting Kubernetes cluster configuration..."

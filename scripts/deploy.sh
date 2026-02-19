@@ -385,116 +385,19 @@ elif [ "$SERVICE_TYPE" = "ClusterIP" ]; then
     fi
 fi
 
-# Handle OpenShift Route
-if [ "$CLUSTER_TYPE" = "openshift" ] && [ "$CREATE_ROUTE" = "true" ]; then
-    print_info "Creating OpenShift route..."
-    
-    if [ -n "$ROUTE_HOSTNAME" ]; then
-        oc expose service $DEPLOYMENT_NAME -n "$NAMESPACE" --hostname="$ROUTE_HOSTNAME" 2>/dev/null || oc patch route $DEPLOYMENT_NAME -n "$NAMESPACE" -p "{\"spec\":{\"host\":\"$ROUTE_HOSTNAME\"}}"
-    else
-        oc expose service $DEPLOYMENT_NAME -n "$NAMESPACE" 2>/dev/null || echo "Route already exists"
+# Handle cluster-specific routing (Ingress for Kubernetes, Route for OpenShift)
+if [ "$CLUSTER_TYPE" = "openshift" ]; then
+    # Call OpenShift-specific deployment script
+    ROUTE_URL=$("$SCRIPT_DIR/deploy-openshift.sh")
+    if [ -n "$ROUTE_URL" ]; then
+        APP_URL="$ROUTE_URL"
     fi
-    
-    # Get route URL
-    ROUTE_HOST=$(oc get route $DEPLOYMENT_NAME -n "$NAMESPACE" -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
-    if [ -n "$ROUTE_HOST" ]; then
-        APP_URL="http://${ROUTE_HOST}"
-        print_success "Route created: $APP_URL"
+elif [ "$CLUSTER_TYPE" = "kubernetes" ]; then
+    # Call Kubernetes-specific deployment script
+    INGRESS_URL=$("$SCRIPT_DIR/deploy-kubernetes.sh")
+    if [ -n "$INGRESS_URL" ]; then
+        APP_URL="$INGRESS_URL"
     fi
-fi
-
-# Auto-detect IBM Cloud Ingress subdomain if requested
-if [ "$CLUSTER_TYPE" = "kubernetes" ] && [ "$AUTO_INGRESS" = "true" ]; then
-    print_info "Auto-detecting IBM Cloud cluster ingress subdomain..."
-    
-    if [ -n "$CLUSTER_NAME" ] && command -v ibmcloud &> /dev/null; then
-        # Get the ingress subdomain from IBM Cloud
-        INGRESS_SUBDOMAIN=$(ibmcloud ks cluster get --cluster "$CLUSTER_NAME" 2>/dev/null | grep "Ingress Subdomain" | awk '{print $NF}' || echo "")
-        
-        if [ -n "$INGRESS_SUBDOMAIN" ] && [ "$INGRESS_SUBDOMAIN" != "-" ]; then
-            print_success "Auto-detected ingress subdomain: $INGRESS_SUBDOMAIN"
-            
-            # If using a manifest with placeholder, replace it
-            if [ -n "$DEPLOYMENT_MANIFEST" ] && [ -f "$DEPLOYMENT_MANIFEST" ]; then
-                if grep -q "cluster-ingress-subdomain" "$DEPLOYMENT_MANIFEST"; then
-                    print_info "Replacing cluster-ingress-subdomain placeholder in manifest..."
-                    
-                    # Create a temporary file with replacements
-                    sed "s|cluster-ingress-subdomain|${INGRESS_SUBDOMAIN}|g" "$DEPLOYMENT_MANIFEST" > /tmp/deployment-with-ingress.yaml
-                    
-                    # Apply the updated manifest
-                    sed "s|IMAGE_PLACEHOLDER|$IMAGE|g" /tmp/deployment-with-ingress.yaml | $CMD apply -n "$NAMESPACE" -f -
-                    handle_error $? "Failed to apply manifest with ingress subdomain"
-                    
-                    # Extract the actual ingress host that was applied
-                    INGRESS_HOST=$(grep -A 20 "kind: Ingress" /tmp/deployment-with-ingress.yaml | grep "host:" | head -1 | awk '{print $2}' | tr -d '"' || echo "")
-                    print_info "Ingress host from manifest: $INGRESS_HOST"
-                fi
-            elif [ -z "$INGRESS_HOST" ]; then
-                # No manifest or no placeholder - create hostname using deployment name
-                INGRESS_HOST="${DEPLOYMENT_NAME}.${INGRESS_SUBDOMAIN}"
-                print_info "Using ingress host: $INGRESS_HOST"
-            fi
-            
-            # Enable TLS by default for IBM Cloud ingress
-            if [ -z "$INGRESS_TLS" ] || [ "$INGRESS_TLS" != "false" ]; then
-                INGRESS_TLS="true"
-                print_info "TLS enabled for IBM Cloud ingress"
-            fi
-        else
-            print_warning "Could not auto-detect ingress subdomain for cluster: $CLUSTER_NAME"
-            print_warning "Ingress will not be configured"
-        fi
-    else
-        print_warning "Cannot auto-detect ingress: ibmcloud CLI not available or CLUSTER_NAME not set"
-    fi
-fi
-
-# Handle Kubernetes Ingress
-if [ "$CLUSTER_TYPE" = "kubernetes" ] && [ -n "$INGRESS_HOST" ]; then
-    print_info "Creating Kubernetes ingress..."
-    
-    TLS_CONFIG=""
-    if [ "$INGRESS_TLS" = "true" ]; then
-        TLS_CONFIG="  tls:
-  - hosts:
-    - $INGRESS_HOST
-    secretName: ${DEPLOYMENT_NAME}-tls"
-    fi
-    
-    cat > /tmp/ingress.yaml <<EOF
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: $DEPLOYMENT_NAME
-  namespace: $NAMESPACE
-  labels:
-    app: $DEPLOYMENT_NAME
-spec:
-$TLS_CONFIG
-  rules:
-  - host: $INGRESS_HOST
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: $DEPLOYMENT_NAME
-            port:
-              number: 80
-EOF
-    
-    $CMD apply -f /tmp/ingress.yaml
-    handle_error $? "Failed to create ingress"
-    
-    if [ "$INGRESS_TLS" = "true" ]; then
-        APP_URL="https://${INGRESS_HOST}"
-    else
-        APP_URL="http://${INGRESS_HOST}"
-    fi
-    
-    print_success "Ingress created: $APP_URL"
 fi
 
 # Set outputs
@@ -518,5 +421,3 @@ echo "EOF" >> $GITHUB_OUTPUT
 print_success "Deployment completed successfully"
 
 echo "::endgroup::"
-
-# Made with Bob
