@@ -1,6 +1,5 @@
 name: 'Deploy to Kubernetes/OpenShift'
 description: 'Deploy container images to Kubernetes or Red Hat OpenShift clusters with health checks and status verification'
-author: 'Bob'
 
 branding:
   icon: 'upload-cloud'
@@ -280,5 +279,3 @@ runs:
         HEALTH_CHECK_PATH: ${{ inputs.health-check-path }}
         HEALTH_CHECK_TIMEOUT: ${{ inputs.health-check-timeout }}
         APP_URL: ${{ steps.deploy.outputs.app-url }}
-
-# Made with Bob

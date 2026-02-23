@@ -40,5 +40,3 @@ handle_error() {
         exit $exit_code
     fi
 }
-
-# Made with Bob

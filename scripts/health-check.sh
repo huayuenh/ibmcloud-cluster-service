@@ -162,5 +162,3 @@ else
 fi
 
 echo "::endgroup::"
-
-# Made with Bob
