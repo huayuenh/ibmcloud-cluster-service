@@ -1,14 +1,19 @@
 name: 'Deploy to Kubernetes/OpenShift'
-description: 'Deploy container images to Kubernetes or Red Hat OpenShift clusters with health checks and status verification'
+description: 'Deploy container images to Kubernetes or Red Hat OpenShift clusters with health checks, status verification, and rollback support'
 
 branding:
   icon: 'upload-cloud'
   color: 'red'
 
 inputs:
+  action:
+    description: 'Action to perform: deploy or rollback'
+    required: false
+    default: 'deploy'
+  
   image:
-    description: 'Container image to deploy (e.g., us.icr.io/namespace/app:tag)'
-    required: true
+    description: 'Container image to deploy (e.g., us.icr.io/namespace/app:tag). Required for deploy action'
+    required: false
   
   cluster-type:
     description: 'Cluster type: kubernetes or openshift'
@@ -141,8 +146,8 @@ inputs:
 
 outputs:
   deployment-status:
-    description: 'Status of the deployment (success/failure)'
-    value: ${{ steps.deploy.outputs.status }}
+    description: 'Status of the deployment/rollback (success/failure)'
+    value: ${{ steps.deploy.outputs.status || steps.rollback.outputs.status }}
   
   application-url:
     description: 'URL to access the deployed application'
@@ -161,8 +166,16 @@ outputs:
     value: ${{ steps.deploy.outputs.info }}
   
   previous-image:
-    description: 'Previously deployed image (only set when capture-previous-image is true)'
-    value: ${{ steps.capture-image.outputs.previous-image }}
+    description: 'Previously deployed image (only set when capture-previous-image is true or during rollback)'
+    value: ${{ steps.capture-image.outputs.previous-image || steps.rollback.outputs.previous-image }}
+  
+  rollback-revision:
+    description: 'Revision number rolled back to (rollback action only)'
+    value: ${{ steps.rollback.outputs.current-revision }}
+  
+  rollback-image:
+    description: 'Image rolled back to (rollback action only)'
+    value: ${{ steps.rollback.outputs.current-image }}
 
 runs:
   using: 'composite'
@@ -171,6 +184,11 @@ runs:
       shell: bash
       run: |
         echo "::group::Validating inputs"
+        
+        if [[ ! "${{ inputs.action }}" =~ ^(deploy|rollback)$ ]]; then
+          echo "::error::Invalid action. Must be 'deploy' or 'rollback'"
+          exit 1
+        fi
         
         if [[ ! "${{ inputs.cluster-type }}" =~ ^(kubernetes|openshift)$ ]]; then
           echo "::error::Invalid cluster-type. Must be 'kubernetes' or 'openshift'"
@@ -184,6 +202,11 @@ runs:
         
         if [[ -n "${{ inputs.ibmcloud-apikey }}" ]] && [[ -z "${{ inputs.cluster-name }}" ]]; then
           echo "::error::cluster-name is required when using ibmcloud-apikey"
+          exit 1
+        fi
+        
+        if [[ "${{ inputs.action }}" == "deploy" ]] && [[ -z "${{ inputs.image }}" ]]; then
+          echo "::error::image is required for deploy action"
           exit 1
         fi
         
@@ -211,7 +234,7 @@ runs:
     
     - name: Capture previous deployment image
       id: capture-image
-      if: inputs.capture-previous-image == 'true'
+      if: inputs.action == 'deploy' && inputs.capture-previous-image == 'true'
       shell: bash
       run: |
         echo "::group::Capturing previous deployment image"
@@ -240,6 +263,7 @@ runs:
     
     - name: Deploy application
       id: deploy
+      if: inputs.action == 'deploy'
       shell: bash
       run: ${{ github.action_path }}/scripts/deploy.sh
       env:
@@ -269,8 +293,19 @@ runs:
         READINESS_PROBE_PATH: ${{ inputs.readiness-probe-path }}
         LIVENESS_PROBE_PATH: ${{ inputs.liveness-probe-path }}
     
+    - name: Rollback deployment
+      id: rollback
+      if: inputs.action == 'rollback'
+      shell: bash
+      run: ${{ github.action_path }}/scripts/rollback.sh
+      env:
+        CLUSTER_TYPE: ${{ inputs.cluster-type }}
+        NAMESPACE: ${{ inputs.namespace }}
+        DEPLOYMENT_NAME: ${{ inputs.deployment-name }}
+    
     - name: Health check
       id: health-check
+      if: inputs.action == 'deploy'
       shell: bash
       run: ${{ github.action_path }}/scripts/health-check.sh
       env:
