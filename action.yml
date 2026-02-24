@@ -288,6 +288,9 @@ runs:
         CLUSTER_TYPE: ${{ inputs.cluster-type }}
         NAMESPACE: ${{ inputs.namespace }}
         DEPLOYMENT_NAME: ${{ inputs.deployment-name }}
+        CONFIG_FILE: ${{ inputs.config-file }}
+        GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+        GITHUB_ENVIRONMENT: ${{ github.event.deployment.environment || '' }}
     
     - name: Health check
       id: health-check
@@ -297,6 +300,9 @@ runs:
       env:
         NAMESPACE: ${{ inputs.namespace }}
         DEPLOYMENT_NAME: ${{ inputs.deployment-name }}
+        CONFIG_FILE: ${{ inputs.config-file }}
+        GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+        GITHUB_ENVIRONMENT: ${{ github.event.deployment.environment || '' }}
         HEALTH_CHECK_PATH: ${{ inputs.health-check-path }}
         HEALTH_CHECK_TIMEOUT: ${{ inputs.health-check-timeout }}
         APP_URL: ${{ steps.deploy.outputs.app-url }}

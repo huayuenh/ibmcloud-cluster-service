@@ -8,6 +8,53 @@ source "$SCRIPT_DIR/common.sh"
 
 echo "::group::Running health checks"
 
+# Function to parse YAML config file (reuse from deploy.sh)
+parse_config_file() {
+    local config_file=$1
+    local environment=$2
+    
+    if [ ! -f "$config_file" ]; then
+        return 1
+    fi
+    
+    # Install yq if not available
+    if ! command -v yq &> /dev/null; then
+        wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 2>/dev/null
+        chmod +x /usr/local/bin/yq
+    fi
+    
+    # Load environment-specific namespace
+    if [ -n "$environment" ]; then
+        export NAMESPACE="${NAMESPACE:-$(yq eval ".environments.$environment.namespace // \"\"" "$config_file")}"
+    fi
+}
+
+# Load configuration file first if provided
+if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
+    ENVIRONMENT="${GITHUB_ENVIRONMENT:-}"
+    if [ -z "$ENVIRONMENT" ] && [ -n "$NAMESPACE" ]; then
+        ENVIRONMENT="$NAMESPACE"
+    fi
+    parse_config_file "$CONFIG_FILE" "$ENVIRONMENT"
+fi
+
+# Auto-detect deployment name from repository if not provided
+if [ -z "$DEPLOYMENT_NAME" ] && [ -n "$GITHUB_REPOSITORY_NAME" ]; then
+    DEPLOYMENT_NAME="$GITHUB_REPOSITORY_NAME"
+    print_info "Auto-detected deployment name from repository: $DEPLOYMENT_NAME"
+fi
+
+# Validate required parameters
+if [ -z "$DEPLOYMENT_NAME" ]; then
+    print_error "DEPLOYMENT_NAME is required but not set"
+    exit 1
+fi
+
+if [ -z "$NAMESPACE" ]; then
+    print_warning "NAMESPACE not set, using default"
+    NAMESPACE="default"
+fi
+
 # Determine command based on cluster type
 if command -v oc &> /dev/null && oc status &> /dev/null; then
     CMD="oc"
@@ -16,6 +63,8 @@ else
 fi
 
 print_info "Checking deployment status..."
+print_info "Deployment: $DEPLOYMENT_NAME"
+print_info "Namespace: $NAMESPACE"
 
 # Check if deployment exists
 if ! $CMD get deployment "$DEPLOYMENT_NAME" -n "$NAMESPACE" &>/dev/null; then
