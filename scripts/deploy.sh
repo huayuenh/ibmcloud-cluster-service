@@ -420,4 +420,38 @@ echo "EOF" >> $GITHUB_OUTPUT
 
 print_success "Deployment completed successfully"
 
+# Generate GitHub Step Summary
+if [ -n "$GITHUB_STEP_SUMMARY" ]; then
+    print_info "Generating deployment summary..."
+    
+    echo "### Deployment Summary :rocket:" >> $GITHUB_STEP_SUMMARY
+    echo "" >> $GITHUB_STEP_SUMMARY
+    echo "#### Deployment Information" >> $GITHUB_STEP_SUMMARY
+    echo "**Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
+    echo "**Deployment Name:** \`$DEPLOYMENT_NAME\`" >> $GITHUB_STEP_SUMMARY
+    echo "**Namespace:** \`$NAMESPACE\`" >> $GITHUB_STEP_SUMMARY
+    echo "**Image:** \`$IMAGE\`" >> $GITHUB_STEP_SUMMARY
+    echo "**Replicas:** $REPLICAS" >> $GITHUB_STEP_SUMMARY
+    echo "" >> $GITHUB_STEP_SUMMARY
+    
+    if [ -n "$APP_URL" ]; then
+        echo "#### Access Information" >> $GITHUB_STEP_SUMMARY
+        echo "**Application URL:** $APP_URL" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "🌐 **[Access your application]($APP_URL)**" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+    fi
+    
+    if [ -n "$SERVICE_IP" ]; then
+        echo "**Service IP:** \`$SERVICE_IP\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+    fi
+    
+    echo "#### Resource Configuration" >> $GITHUB_STEP_SUMMARY
+    echo "**CPU Limits:** $RESOURCE_LIMITS_CPU" >> $GITHUB_STEP_SUMMARY
+    echo "**Memory Limits:** $RESOURCE_LIMITS_MEMORY" >> $GITHUB_STEP_SUMMARY
+    echo "**CPU Requests:** $RESOURCE_REQUESTS_CPU" >> $GITHUB_STEP_SUMMARY
+    echo "**Memory Requests:** $RESOURCE_REQUESTS_MEMORY" >> $GITHUB_STEP_SUMMARY
+fi
+
 echo "::endgroup::"

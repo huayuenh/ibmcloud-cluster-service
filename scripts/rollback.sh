@@ -91,11 +91,45 @@ if $CMD rollout status deployment/"$DEPLOYMENT_NAME" -n "$NAMESPACE" --timeout=5
     echo "desired-replicas=$DESIRED_REPLICAS" >> $GITHUB_OUTPUT
     
     print_success "Rollback verification complete"
+    
+    # Generate GitHub Step Summary
+    if [ -n "$GITHUB_STEP_SUMMARY" ]; then
+        print_info "Generating rollback summary..."
+        
+        echo "### Rollback Summary :leftwards_arrow_with_hook:" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "#### Rollback Information" >> $GITHUB_STEP_SUMMARY
+        echo "**Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
+        echo "**Deployment Name:** \`$DEPLOYMENT_NAME\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Namespace:** \`$NAMESPACE\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "#### Revision Details" >> $GITHUB_STEP_SUMMARY
+        echo "**Previous Revision:** $CURRENT_REVISION" >> $GITHUB_STEP_SUMMARY
+        echo "**Previous Image:** \`$CURRENT_IMAGE\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Current Revision:** $NEW_REVISION (rolled back)" >> $GITHUB_STEP_SUMMARY
+        echo "**Current Image:** \`$ROLLED_BACK_IMAGE\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "#### Pod Status" >> $GITHUB_STEP_SUMMARY
+        echo "**Ready Replicas:** $READY_REPLICAS/$DESIRED_REPLICAS" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "⚠️ **Rollback was triggered due to deployment failure**" >> $GITHUB_STEP_SUMMARY
+    fi
 else
     print_error "Rollback failed or timed out"
     echo "::error::Rollback failed or timed out"
     echo "status=failed" >> $GITHUB_OUTPUT
     echo "error=Rollback timeout" >> $GITHUB_OUTPUT
+    
+    # Generate failure summary
+    if [ -n "$GITHUB_STEP_SUMMARY" ]; then
+        echo "### Rollback Failed :x:" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Deployment Name:** \`$DEPLOYMENT_NAME\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Namespace:** \`$NAMESPACE\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "❌ **Rollback failed or timed out - manual intervention required**" >> $GITHUB_STEP_SUMMARY
+    fi
+    
     exit 1
 fi
 
