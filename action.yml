@@ -139,11 +139,6 @@ inputs:
     required: false
     default: 'false'
   
-  capture-previous-image:
-    description: 'Capture the currently deployed image before deploying (true/false)'
-    required: false
-    default: 'false'
-
 outputs:
   deployment-status:
     description: 'Status of the deployment/rollback (success/failure)'
@@ -166,8 +161,8 @@ outputs:
     value: ${{ steps.deploy.outputs.info }}
   
   previous-image:
-    description: 'Previously deployed image (only set when capture-previous-image is true or during rollback)'
-    value: ${{ steps.capture-image.outputs.previous-image || steps.rollback.outputs.previous-image }}
+    description: 'Previously deployed image (rollback action only)'
+    value: ${{ steps.rollback.outputs.previous-image }}
   
   rollback-revision:
     description: 'Revision number rolled back to (rollback action only)'
@@ -231,35 +226,6 @@ runs:
         IBM_CLOUD_API_KEY: ${{ inputs.ibmcloud-apikey }}
         CLUSTER_NAME: ${{ inputs.cluster-name }}
         CLUSTER_REGION: ${{ inputs.cluster-region }}
-    
-    - name: Capture previous deployment image
-      id: capture-image
-      if: inputs.action == 'deploy' && inputs.capture-previous-image == 'true'
-      shell: bash
-      run: |
-        echo "::group::Capturing previous deployment image"
-        
-        # Set kubectl or oc command based on cluster type
-        if [ "${{ inputs.cluster-type }}" = "openshift" ]; then
-            CMD="oc"
-        else
-            CMD="kubectl"
-        fi
-        
-        # Get the current image from the deployment
-        PREVIOUS_IMAGE=$($CMD get deployment "${{ inputs.deployment-name }}" \
-          -n "${{ inputs.namespace }}" \
-          -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "")
-        
-        if [ -n "$PREVIOUS_IMAGE" ]; then
-          echo "previous-image=$PREVIOUS_IMAGE" >> $GITHUB_OUTPUT
-          echo "✓ Previous image captured: $PREVIOUS_IMAGE"
-        else
-          echo "previous-image=" >> $GITHUB_OUTPUT
-          echo "⚠ No previous deployment found (first deployment or deployment doesn't exist)"
-        fi
-        
-        echo "::endgroup::"
     
     - name: Deploy application
       id: deploy

@@ -1,10 +1,11 @@
 # Deploy to Kubernetes/OpenShift Action
 
-A comprehensive GitHub Action for deploying container images to Kubernetes or Red Hat OpenShift clusters with health checks, status verification, and automatic URL generation.
+A comprehensive GitHub Action for deploying container images to Kubernetes or Red Hat OpenShift clusters with health checks, status verification, automatic URL generation, and native Kubernetes rollback support.
 
 ## Features
 
 - 🚀 **Deploy to Kubernetes or OpenShift** clusters
+- 🔄 **Native Kubernetes Rollback** using ReplicaSets for fast, reliable rollbacks
 - 🔐 **Multiple authentication methods** (kubeconfig or IBM Cloud API key)
 - 🔑 **Automatic image pull secrets** for IBM Cloud Container Registry
 - 🏥 **Health checks** with configurable timeout and path
@@ -20,7 +21,8 @@ A comprehensive GitHub Action for deploying container images to Kubernetes or Re
 
 | Name | Required | Default | Description |
 |------|----------|---------|-------------|
-| `image` | ✅ | - | Container image to deploy (e.g., `us.icr.io/namespace/app:tag`) |
+| `action` | ❌ | `deploy` | Action to perform: `deploy` or `rollback` |
+| `image` | ❌ * | - | Container image to deploy (e.g., `us.icr.io/namespace/app:tag`). Required for deploy action |
 | `cluster-type` | ❌ | `kubernetes` | Cluster type: `kubernetes` or `openshift` |
 | `kubeconfig` | ❌ * | - | Kubeconfig content (base64 encoded or plain text) |
 | `ibmcloud-apikey` | ❌ * | - | IBM Cloud API key (for IBM Cloud clusters) |
@@ -47,18 +49,24 @@ A comprehensive GitHub Action for deploying container images to Kubernetes or Re
 | `route-hostname` | ❌ | - | Custom hostname for OpenShift route |
 | `ingress-host` | ❌ | - | Ingress hostname (Kubernetes only) |
 | `ingress-tls` | ❌ | `false` | Enable TLS for ingress |
+| `auto-ingress` | ❌ | `false` | Automatically detect and configure IBM Cloud cluster ingress subdomain |
 
-**Note:** ❌ * indicates conditionally required - either `kubeconfig` OR (`ibmcloud-apikey` + `cluster-name`) must be provided.
+**Note:** ❌ * indicates conditionally required:
+- Either `kubeconfig` OR (`ibmcloud-apikey` + `cluster-name`) must be provided
+- `image` is required for `deploy` action, not required for `rollback` action
 
 ## Outputs
 
 | Output | Description |
 |--------|-------------|
-| `deployment-status` | Status of the deployment (success/failure) |
+| `deployment-status` | Status of the deployment/rollback (success/failure) |
 | `application-url` | URL to access the deployed application |
 | `service-ip` | Service external IP or hostname |
 | `health-check-result` | Health check result |
 | `deployment-info` | Deployment information in JSON format |
+| `previous-image` | Previously deployed image (rollback action only) |
+| `rollback-revision` | Revision number rolled back to (rollback action only) |
+| `rollback-image` | Image rolled back to (rollback action only) |
 
 ## Usage Examples
 
@@ -218,12 +226,48 @@ Configure different paths for liveness and readiness:
     liveness-probe-path: /alive
 ```
 
-## Complete Workflow Example
+### Rollback Deployment
 
-Here's a complete workflow that builds, pushes, and deploys:
+Rollback a deployment to its previous revision using Kubernetes native rollback:
 
 ```yaml
-name: Build, Push, and Deploy
+- name: Rollback deployment
+  uses: ./deploy-action
+  with:
+    action: rollback
+    cluster-type: kubernetes
+    ibmcloud-apikey: ${{ secrets.IBM_CLOUD_API_KEY }}
+    cluster-name: my-k8s-cluster
+    cluster-region: us-south
+    deployment-name: myapp
+    namespace: production
+```
+
+**Rollback Features:**
+- Uses `kubectl rollout undo` for native Kubernetes rollback
+- Leverages ReplicaSet revision history
+- Fast and atomic operation
+- Validates revision history exists before attempting rollback
+- Returns previous and current revision information
+- Waits for rollback completion with timeout
+
+**Rollback Outputs:**
+```yaml
+- name: Verify rollback
+  run: |
+    echo "Rolled back to revision: ${{ steps.rollback.outputs.rollback-revision }}"
+    echo "Current image: ${{ steps.rollback.outputs.rollback-image }}"
+    echo "Previous image: ${{ steps.rollback.outputs.previous-image }}"
+```
+
+## Complete Workflow Examples
+
+### Deploy with Automatic Rollback on Failure
+
+Here's a complete workflow that builds, pushes, deploys, and automatically rolls back on failure:
+
+```yaml
+name: Build, Push, Deploy with Rollback
 
 on:
   push:
@@ -242,25 +286,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       
-      - name: Build image
-        id: build
-        uses: ./docker-build-action
+      - name: Run tests
+        run: npm test
+      
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
         with:
-          image-name: myapp:${{ github.sha }}
+          context: .
+          push: false
+          load: true
+          tags: myapp:${{ github.sha }}
       
       - name: Push to IBM Cloud Container Registry
-        uses: ./
+        uses: huayuenh/container-registry-service-action@main
         with:
           apikey: ${{ secrets.IBM_CLOUD_API_KEY }}
           image: ${{ env.IBM_CLOUD_REGION }}.icr.io/${{ env.IBM_CLOUD_NAMESPACE }}/myapp:${{ github.sha }}
-          local-image: ${{ steps.build.outputs.image-name }}
+          local-image: myapp:${{ github.sha }}
           action: push
           scan: true
       
       - name: Deploy to Kubernetes
         id: deploy
-        uses: ./deploy-action
+        uses: huayuenh/cluster-service-action@main
         with:
+          action: deploy
           image: ${{ env.IBM_CLOUD_REGION }}.icr.io/${{ env.IBM_CLOUD_NAMESPACE }}/myapp:${{ github.sha }}
           cluster-type: kubernetes
           ibmcloud-apikey: ${{ secrets.IBM_CLOUD_API_KEY }}
@@ -270,7 +320,27 @@ jobs:
           namespace: production
           replicas: 3
       
+      - name: Run acceptance tests
+        id: acceptance-tests
+        continue-on-error: true
+        run: |
+          # Test the deployed application
+          curl -f ${{ steps.deploy.outputs.application-url }}/health
+      
+      - name: Rollback on failure
+        if: steps.acceptance-tests.outcome == 'failure'
+        uses: huayuenh/cluster-service-action@main
+        with:
+          action: rollback
+          cluster-type: kubernetes
+          ibmcloud-apikey: ${{ secrets.IBM_CLOUD_API_KEY }}
+          cluster-name: ${{ env.CLUSTER_NAME }}
+          cluster-region: ${{ env.IBM_CLOUD_REGION }}
+          deployment-name: myapp
+          namespace: production
+      
       - name: Display deployment info
+        if: steps.acceptance-tests.outcome == 'success'
         run: |
           echo "### Deployment Summary :rocket:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
