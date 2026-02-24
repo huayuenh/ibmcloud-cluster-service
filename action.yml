@@ -47,7 +47,11 @@ inputs:
     required: true
   
   deployment-manifest:
-    description: 'Path to Kubernetes deployment manifest file'
+    description: 'Path to Kubernetes deployment manifest file (legacy - use manifest-template instead)'
+    required: false
+  
+  manifest-template:
+    description: 'Path to Kubernetes manifest template file with variable substitution'
     required: false
   
   container-name:
@@ -238,6 +242,7 @@ runs:
         NAMESPACE: ${{ inputs.namespace }}
         DEPLOYMENT_NAME: ${{ inputs.deployment-name }}
         DEPLOYMENT_MANIFEST: ${{ inputs.deployment-manifest }}
+        MANIFEST_TEMPLATE: ${{ inputs.manifest-template }}
         CONTAINER_NAME: ${{ inputs.container-name }}
         PORT: ${{ inputs.port }}
         SERVICE_TYPE: ${{ inputs.service-type }}

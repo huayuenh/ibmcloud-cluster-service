@@ -63,8 +63,69 @@ fi
 # Set container name
 CONTAINER_NAME_ACTUAL="${CONTAINER_NAME:-$DEPLOYMENT_NAME}"
 
-if [ -n "$DEPLOYMENT_MANIFEST" ] && [ -f "$DEPLOYMENT_MANIFEST" ]; then
-    # Use provided manifest
+# Function to substitute variables in template
+substitute_template_vars() {
+    local template_file=$1
+    local output_file=$2
+    
+    # Read template
+    local content=$(cat "$template_file")
+    
+    # Substitute variables
+    content="${content//\{\{IMAGE\}\}/$IMAGE}"
+    content="${content//\{\{DEPLOYMENT_NAME\}\}/$DEPLOYMENT_NAME}"
+    content="${content//\{\{NAMESPACE\}\}/$NAMESPACE}"
+    content="${content//\{\{CONTAINER_NAME\}\}/$CONTAINER_NAME_ACTUAL}"
+    content="${content//\{\{PORT\}\}/$PORT}"
+    content="${content//\{\{REPLICAS\}\}/$REPLICAS}"
+    content="${content//\{\{SERVICE_TYPE\}\}/$SERVICE_TYPE}"
+    content="${content//\{\{RESOURCE_LIMITS_CPU\}\}/$RESOURCE_LIMITS_CPU}"
+    content="${content//\{\{RESOURCE_LIMITS_MEMORY\}\}/$RESOURCE_LIMITS_MEMORY}"
+    content="${content//\{\{RESOURCE_REQUESTS_CPU\}\}/$RESOURCE_REQUESTS_CPU}"
+    content="${content//\{\{RESOURCE_REQUESTS_MEMORY\}\}/$RESOURCE_REQUESTS_MEMORY}"
+    content="${content//\{\{IMAGE_PULL_SECRET\}\}/${IMAGE_PULL_SECRET:-}}"
+    content="${content//\{\{VERSION\}\}/${VERSION:-latest}}"
+    
+    # Handle environment variables
+    if [ -n "$ENV_VARS" ]; then
+        local env_yaml=""
+        while IFS= read -r env_var; do
+            if [ -n "$env_var" ]; then
+                KEY=$(echo "$env_var" | cut -d'=' -f1)
+                VALUE=$(echo "$env_var" | cut -d'=' -f2-)
+                env_yaml="${env_yaml}        - name: $KEY\n          value: \"$VALUE\"\n"
+            fi
+        done <<< "$ENV_VARS"
+        content="${content//\{\{ENV_VARS\}\}/$env_yaml}"
+    else
+        # Remove the ENV_VARS placeholder if no env vars
+        content=$(echo "$content" | grep -v "{{ENV_VARS}}")
+    fi
+    
+    # Write to output file
+    echo -e "$content" > "$output_file"
+}
+
+if [ -n "$MANIFEST_TEMPLATE" ] && [ -f "$MANIFEST_TEMPLATE" ]; then
+    # Use manifest template with variable substitution
+    print_info "Using manifest template: $MANIFEST_TEMPLATE"
+    
+    # Substitute variables and create temporary manifest
+    TEMP_MANIFEST="/tmp/deployment-$(date +%s).yaml"
+    substitute_template_vars "$MANIFEST_TEMPLATE" "$TEMP_MANIFEST"
+    
+    print_info "Template variables substituted"
+    print_info "Applying manifest..."
+    
+    # Apply the processed manifest
+    $CMD apply -f "$TEMP_MANIFEST"
+    handle_error $? "Failed to apply manifest template"
+    
+    # Clean up
+    rm -f "$TEMP_MANIFEST"
+    
+elif [ -n "$DEPLOYMENT_MANIFEST" ] && [ -f "$DEPLOYMENT_MANIFEST" ]; then
+    # Use provided manifest (legacy support)
     print_info "Using deployment manifest: $DEPLOYMENT_MANIFEST"
     
     # Parse manifest to extract service and ingress information

@@ -30,7 +30,8 @@ A comprehensive GitHub Action for deploying container images to Kubernetes or Re
 | `cluster-region` | ❌ | `us-south` | IBM Cloud cluster region |
 | `namespace` | ❌ | `default` | Kubernetes namespace for deployment |
 | `deployment-name` | ✅ | - | Name of the deployment |
-| `deployment-manifest` | ❌ | - | Path to custom deployment manifest |
+| `manifest-template` | ❌ | - | Path to deployment manifest template with variable substitution |
+| `deployment-manifest` | ❌ | - | Path to custom deployment manifest (legacy, use manifest-template instead) |
 | `container-name` | ❌ | deployment-name | Container name in the deployment |
 | `port` | ❌ | `8080` | Container port to expose |
 | `service-type` | ❌ | `ClusterIP` | Service type: ClusterIP, NodePort, LoadBalancer |
@@ -70,7 +71,118 @@ A comprehensive GitHub Action for deploying container images to Kubernetes or Re
 
 ## Usage Examples
 
-### Deploy to IBM Cloud Kubernetes
+### Deploy Using Manifest Template (Recommended)
+
+Use a version-controlled manifest template with variable substitution:
+
+```yaml
+- name: Deploy to Kubernetes
+  uses: ./deploy-action
+  with:
+    action: deploy
+    image: us.icr.io/my-namespace/myapp:v1.0.0
+    cluster-type: kubernetes
+    ibmcloud-apikey: ${{ secrets.IBM_CLOUD_API_KEY }}
+    cluster-name: my-k8s-cluster
+    cluster-region: us-south
+    deployment-name: myapp
+    namespace: production
+    manifest-template: .k8s/deployment.yaml
+    port: 8080
+    replicas: 3
+    resource-limits-cpu: 500m
+    resource-limits-memory: 512Mi
+    resource-requests-cpu: 250m
+    resource-requests-memory: 256Mi
+    version: v1.0.0
+    env-vars: |
+      VERSION=v1.0.0
+      ENVIRONMENT=production
+```
+
+**Template file (.k8s/deployment.yaml):**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{DEPLOYMENT_NAME}}
+  namespace: {{NAMESPACE}}
+  labels:
+    app: {{DEPLOYMENT_NAME}}
+    version: {{VERSION}}
+spec:
+  replicas: {{REPLICAS}}
+  selector:
+    matchLabels:
+      app: {{DEPLOYMENT_NAME}}
+  template:
+    metadata:
+      labels:
+        app: {{DEPLOYMENT_NAME}}
+        version: {{VERSION}}
+    spec:
+      imagePullSecrets:
+      - name: {{IMAGE_PULL_SECRET}}
+      containers:
+      - name: {{CONTAINER_NAME}}
+        image: {{IMAGE}}
+        ports:
+        - containerPort: {{PORT}}
+          protocol: TCP
+        resources:
+          limits:
+            cpu: {{RESOURCE_LIMITS_CPU}}
+            memory: {{RESOURCE_LIMITS_MEMORY}}
+          requests:
+            cpu: {{RESOURCE_REQUESTS_CPU}}
+            memory: {{RESOURCE_REQUESTS_MEMORY}}
+        env:
+        {{ENV_VARS}}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: {{PORT}}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: {{PORT}}
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{DEPLOYMENT_NAME}}
+  namespace: {{NAMESPACE}}
+spec:
+  type: {{SERVICE_TYPE}}
+  selector:
+    app: {{DEPLOYMENT_NAME}}
+  ports:
+  - port: 80
+    targetPort: {{PORT}}
+    protocol: TCP
+```
+
+**Available template variables:**
+- `{{IMAGE}}` - Container image
+- `{{DEPLOYMENT_NAME}}` - Deployment name
+- `{{NAMESPACE}}` - Kubernetes namespace
+- `{{CONTAINER_NAME}}` - Container name
+- `{{PORT}}` - Container port
+- `{{REPLICAS}}` - Number of replicas
+- `{{SERVICE_TYPE}}` - Service type
+- `{{RESOURCE_LIMITS_CPU}}` - CPU limit
+- `{{RESOURCE_LIMITS_MEMORY}}` - Memory limit
+- `{{RESOURCE_REQUESTS_CPU}}` - CPU request
+- `{{RESOURCE_REQUESTS_MEMORY}}` - Memory request
+- `{{IMAGE_PULL_SECRET}}` - Image pull secret name
+- `{{VERSION}}` - Version label
+- `{{ENV_VARS}}` - Environment variables (auto-formatted)
+
+### Deploy to IBM Cloud Kubernetes (Inline Configuration)
 
 Deploy an image from IBM Cloud Container Registry to an IBM Cloud Kubernetes cluster:
 
@@ -78,6 +190,7 @@ Deploy an image from IBM Cloud Container Registry to an IBM Cloud Kubernetes clu
 - name: Deploy to Kubernetes
   uses: ./deploy-action
   with:
+    action: deploy
     image: us.icr.io/my-namespace/myapp:v1.0.0
     cluster-type: kubernetes
     ibmcloud-apikey: ${{ secrets.IBM_CLOUD_API_KEY }}
