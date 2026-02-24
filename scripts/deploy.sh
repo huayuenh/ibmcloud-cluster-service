@@ -446,4 +446,99 @@ fi
 
 echo "::endgroup::"
 
-# Made with Bob
+# Perform health check if not skipped
+if [ "${SKIP_HEALTH_CHECK:-false}" != "true" ]; then
+    echo "::group::Running health checks"
+    
+    print_info "Checking deployment health..."
+    print_info "Deployment: $DEPLOYMENT_NAME"
+    print_info "Namespace: $NAMESPACE"
+    
+    # Get deployment status
+    READY_REPLICAS=$($CMD get deployment "$DEPLOYMENT_NAME" -n "$NAMESPACE" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+    DESIRED_REPLICAS=$($CMD get deployment "$DEPLOYMENT_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.replicas}')
+    
+    print_info "Ready replicas: $READY_REPLICAS/$DESIRED_REPLICAS"
+    
+    if [ "$READY_REPLICAS" != "$DESIRED_REPLICAS" ]; then
+        print_warning "Not all replicas are ready yet"
+    fi
+    
+    # Check pod status
+    print_info "Checking pod status..."
+    PODS=$($CMD get pods -n "$NAMESPACE" -l app="$DEPLOYMENT_NAME" -o jsonpath='{.items[*].metadata.name}')
+    
+    if [ -z "$PODS" ]; then
+        print_error "No pods found for deployment $DEPLOYMENT_NAME"
+        echo "health-check-result=no_pods_found" >> $GITHUB_OUTPUT
+    else
+        print_info "Found pods: $PODS"
+        
+        # Check each pod status
+        ALL_RUNNING=true
+        for POD in $PODS; do
+            POD_STATUS=$($CMD get pod "$POD" -n "$NAMESPACE" -o jsonpath='{.status.phase}')
+            print_info "Pod $POD status: $POD_STATUS"
+            
+            if [ "$POD_STATUS" != "Running" ]; then
+                ALL_RUNNING=false
+                print_warning "Pod $POD is not running"
+            fi
+        done
+        
+        # Perform HTTP health check if APP_URL is available
+        if [ -n "$APP_URL" ] && [ -n "$HEALTH_CHECK_PATH" ]; then
+            print_info "Performing HTTP health check..."
+            
+            # Determine which endpoint to check
+            if [ "$HEALTH_CHECK_PATH" != "/" ]; then
+                HEALTH_CHECK_URL="${APP_URL}${HEALTH_CHECK_PATH}"
+                print_info "Checking health endpoint: $HEALTH_CHECK_URL"
+            else
+                HEALTH_CHECK_URL="${APP_URL}"
+                print_info "Checking root endpoint: $HEALTH_CHECK_URL"
+            fi
+            
+            TIMEOUT=${HEALTH_CHECK_TIMEOUT:-300}
+            ELAPSED=0
+            INTERVAL=5
+            
+            print_info "Waiting for application to respond (timeout: ${TIMEOUT}s)..."
+            
+            while [ $ELAPSED -lt $TIMEOUT ]; do
+                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "$HEALTH_CHECK_URL" 2>/dev/null || echo "000")
+                
+                # Accept 200, 204, and redirects as success
+                if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+                    print_success "Application is responding! HTTP $HTTP_CODE"
+                    echo "health-check-result=healthy" >> $GITHUB_OUTPUT
+                    echo "http-code=$HTTP_CODE" >> $GITHUB_OUTPUT
+                    break
+                fi
+                
+                if [ "$HTTP_CODE" != "000" ]; then
+                    print_warning "Received HTTP $HTTP_CODE (expected 200, 204, 301, or 302)"
+                fi
+                
+                echo -n "."
+                sleep $INTERVAL
+                ELAPSED=$((ELAPSED + INTERVAL))
+            done
+            
+            if [ $ELAPSED -ge $TIMEOUT ]; then
+                echo ""
+                print_warning "Health check timed out after ${TIMEOUT}s"
+                echo "health-check-result=timeout" >> $GITHUB_OUTPUT
+                echo "http-code=$HTTP_CODE" >> $GITHUB_OUTPUT
+            fi
+        elif [ "$ALL_RUNNING" = true ]; then
+            print_success "All pods are running"
+            echo "health-check-result=pods_running" >> $GITHUB_OUTPUT
+        else
+            print_warning "Some pods are not running"
+            echo "health-check-result=pods_not_ready" >> $GITHUB_OUTPUT
+        fi
+    fi
+    
+    echo "::endgroup::"
+fi

@@ -50,10 +50,6 @@ inputs:
     description: 'Path to deployment configuration file (e.g., .deploy.yaml)'
     required: false
   
-  deployment-manifest:
-    description: 'Path to Kubernetes deployment manifest file (legacy - use manifest-template instead)'
-    required: false
-  
   manifest-template:
     description: 'Path to Kubernetes manifest template file with variable substitution'
     required: false
@@ -78,14 +74,18 @@ inputs:
     default: '3'
   
   health-check-path:
-    description: 'HTTP path for health check (e.g., /health, /ready). Leave empty or set to / to check root endpoint'
+    description: 'HTTP path for health check (e.g., /health, /ready). Leave empty to skip HTTP health check'
     required: false
-    default: '/'
   
   health-check-timeout:
     description: 'Health check timeout in seconds'
     required: false
     default: '300'
+  
+  skip-health-check:
+    description: 'Skip health check after deployment'
+    required: false
+    default: 'false'
   
   enable-probes:
     description: 'Enable liveness and readiness probes (true/false)'
@@ -174,7 +174,11 @@ outputs:
   
   health-check-result:
     description: 'Health check result'
-    value: ${{ steps.health-check.outputs.result }}
+    value: ${{ steps.deploy.outputs.health-check-result }}
+  
+  http-code:
+    description: 'HTTP status code from health check'
+    value: ${{ steps.deploy.outputs.http-code }}
   
   deployment-info:
     description: 'Deployment information in JSON format'
@@ -260,7 +264,6 @@ runs:
         CONFIG_FILE: ${{ inputs.config-file }}
         GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
         GITHUB_ENVIRONMENT: ${{ github.event.deployment.environment || '' }}
-        DEPLOYMENT_MANIFEST: ${{ inputs.deployment-manifest }}
         MANIFEST_TEMPLATE: ${{ inputs.manifest-template }}
         CONTAINER_NAME: ${{ inputs.container-name }}
         PORT: ${{ inputs.port }}
@@ -280,6 +283,8 @@ runs:
         IBM_CLOUD_API_KEY: ${{ inputs.ibmcloud-apikey }}
         CLUSTER_NAME: ${{ inputs.cluster-name }}
         HEALTH_CHECK_PATH: ${{ inputs.health-check-path }}
+        HEALTH_CHECK_TIMEOUT: ${{ inputs.health-check-timeout }}
+        SKIP_HEALTH_CHECK: ${{ inputs.skip-health-check }}
         ENABLE_PROBES: ${{ inputs.enable-probes }}
         READINESS_PROBE_PATH: ${{ inputs.readiness-probe-path }}
         LIVENESS_PROBE_PATH: ${{ inputs.liveness-probe-path }}
@@ -296,18 +301,3 @@ runs:
         CONFIG_FILE: ${{ inputs.config-file }}
         GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
         GITHUB_ENVIRONMENT: ${{ github.event.deployment.environment || '' }}
-    
-    - name: Health check
-      id: health-check
-      if: inputs.action == 'deploy'
-      shell: bash
-      run: ${{ github.action_path }}/scripts/health-check.sh
-      env:
-        NAMESPACE: ${{ inputs.namespace }}
-        DEPLOYMENT_NAME: ${{ inputs.deployment-name }}
-        CONFIG_FILE: ${{ inputs.config-file }}
-        GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
-        GITHUB_ENVIRONMENT: ${{ github.event.deployment.environment || '' }}
-        HEALTH_CHECK_PATH: ${{ inputs.health-check-path }}
-        HEALTH_CHECK_TIMEOUT: ${{ inputs.health-check-timeout }}
-        APP_URL: ${{ steps.deploy.outputs.app-url }}
