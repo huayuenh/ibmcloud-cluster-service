@@ -132,6 +132,10 @@ inputs:
     description: 'Environment variables in KEY=VALUE format, one per line'
     required: false
   
+  env-template:
+    description: 'Path to environment variable template file (e.g., .env.template)'
+    required: false
+  
   create-route:
     description: 'Create OpenShift route (OpenShift only)'
     required: false
@@ -267,6 +271,7 @@ runs:
         RESOURCE_REQUESTS_CPU: ${{ inputs.resource-requests-cpu }}
         RESOURCE_REQUESTS_MEMORY: ${{ inputs.resource-requests-memory }}
         ENV_VARS: ${{ inputs.env-vars }}
+        ENV_TEMPLATE: ${{ inputs.env-template }}
         CREATE_ROUTE: ${{ inputs.create-route }}
         ROUTE_HOSTNAME: ${{ inputs.route-hostname }}
         INGRESS_HOST: ${{ inputs.ingress-host }}
