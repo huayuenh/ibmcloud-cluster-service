@@ -8,6 +8,77 @@ source "$SCRIPT_DIR/common.sh"
 
 echo "::group::Deploying application"
 
+# Function to parse YAML config file
+parse_config_file() {
+    local config_file=$1
+    local environment=$2
+    
+    if [ ! -f "$config_file" ]; then
+        print_warning "Config file not found: $config_file"
+        return 1
+    fi
+    
+    print_info "Loading configuration from: $config_file"
+    
+    # Install yq if not available (for YAML parsing)
+    if ! command -v yq &> /dev/null; then
+        print_info "Installing yq for YAML parsing..."
+        wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+        chmod +x /usr/local/bin/yq
+    fi
+    
+    # Load defaults first
+    export PORT="${PORT:-$(yq eval '.defaults.port // ""' "$config_file")}"
+    export REPLICAS="${REPLICAS:-$(yq eval '.defaults.replicas // ""' "$config_file")}"
+    export SERVICE_TYPE="${SERVICE_TYPE:-$(yq eval '.defaults.service-type // ""' "$config_file")}"
+    export MANIFEST_TEMPLATE="${MANIFEST_TEMPLATE:-$(yq eval '.defaults.manifest-template // ""' "$config_file")}"
+    export RESOURCE_LIMITS_CPU="${RESOURCE_LIMITS_CPU:-$(yq eval '.defaults.resource-limits-cpu // ""' "$config_file")}"
+    export RESOURCE_LIMITS_MEMORY="${RESOURCE_LIMITS_MEMORY:-$(yq eval '.defaults.resource-limits-memory // ""' "$config_file")}"
+    export RESOURCE_REQUESTS_CPU="${RESOURCE_REQUESTS_CPU:-$(yq eval '.defaults.resource-requests-cpu // ""' "$config_file")}"
+    export RESOURCE_REQUESTS_MEMORY="${RESOURCE_REQUESTS_MEMORY:-$(yq eval '.defaults.resource-requests-memory // ""' "$config_file")}"
+    
+    # Load environment-specific settings if environment is specified
+    if [ -n "$environment" ]; then
+        print_info "Loading environment-specific settings for: $environment"
+        
+        export NAMESPACE="${NAMESPACE:-$(yq eval ".environments.$environment.namespace // \"\"" "$config_file")}"
+        export REPLICAS="${REPLICAS:-$(yq eval ".environments.$environment.replicas // \"\"" "$config_file")}"
+        export RESOURCE_LIMITS_CPU="${RESOURCE_LIMITS_CPU:-$(yq eval ".environments.$environment.resource-limits-cpu // \"\"" "$config_file")}"
+        export RESOURCE_LIMITS_MEMORY="${RESOURCE_LIMITS_MEMORY:-$(yq eval ".environments.$environment.resource-limits-memory // \"\"" "$config_file")}"
+        export RESOURCE_REQUESTS_CPU="${RESOURCE_REQUESTS_CPU:-$(yq eval ".environments.$environment.resource-requests-cpu // \"\"" "$config_file")}"
+        export RESOURCE_REQUESTS_MEMORY="${RESOURCE_REQUESTS_MEMORY:-$(yq eval ".environments.$environment.resource-requests-memory // \"\"" "$config_file")}"
+        
+        # Load environment variables from config
+        local config_env_vars=$(yq eval ".environments.$environment.env-vars // {} | to_entries | .[] | .key + \"=\" + .value" "$config_file" 2>/dev/null || echo "")
+        if [ -n "$config_env_vars" ]; then
+            if [ -n "$ENV_VARS" ]; then
+                ENV_VARS="$ENV_VARS"$'\n'"$config_env_vars"
+            else
+                ENV_VARS="$config_env_vars"
+            fi
+        fi
+    fi
+    
+    print_success "Configuration loaded successfully"
+}
+
+# Auto-detect deployment name from repository if not provided
+if [ -z "$DEPLOYMENT_NAME" ] && [ -n "$GITHUB_REPOSITORY_NAME" ]; then
+    DEPLOYMENT_NAME="$GITHUB_REPOSITORY_NAME"
+    print_info "Auto-detected deployment name from repository: $DEPLOYMENT_NAME"
+fi
+
+# Load configuration file if provided
+if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
+    # Determine environment from GitHub environment or namespace
+    ENVIRONMENT="${GITHUB_ENVIRONMENT:-}"
+    if [ -z "$ENVIRONMENT" ] && [ -n "$NAMESPACE" ]; then
+        ENVIRONMENT="$NAMESPACE"
+    fi
+    
+    parse_config_file "$CONFIG_FILE" "$ENVIRONMENT"
+fi
+
 # Set kubectl or oc command based on cluster type
 if [ "$CLUSTER_TYPE" = "openshift" ]; then
     CMD="oc"

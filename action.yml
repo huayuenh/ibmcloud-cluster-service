@@ -43,8 +43,12 @@ inputs:
     default: 'default'
   
   deployment-name:
-    description: 'Name of the deployment'
-    required: true
+    description: 'Name of the deployment (defaults to repository name if not provided)'
+    required: false
+  
+  config-file:
+    description: 'Path to deployment configuration file (e.g., .deploy.yaml)'
+    required: false
   
   deployment-manifest:
     description: 'Path to Kubernetes deployment manifest file (legacy - use manifest-template instead)'
@@ -249,6 +253,9 @@ runs:
         CLUSTER_TYPE: ${{ inputs.cluster-type }}
         NAMESPACE: ${{ inputs.namespace }}
         DEPLOYMENT_NAME: ${{ inputs.deployment-name }}
+        CONFIG_FILE: ${{ inputs.config-file }}
+        GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+        GITHUB_ENVIRONMENT: ${{ github.event.deployment.environment || '' }}
         DEPLOYMENT_MANIFEST: ${{ inputs.deployment-manifest }}
         MANIFEST_TEMPLATE: ${{ inputs.manifest-template }}
         CONTAINER_NAME: ${{ inputs.container-name }}
