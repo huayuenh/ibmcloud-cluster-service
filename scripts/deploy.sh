@@ -62,13 +62,7 @@ parse_config_file() {
     print_success "Configuration loaded successfully"
 }
 
-# Auto-detect deployment name from repository if not provided
-if [ -z "$DEPLOYMENT_NAME" ] && [ -n "$GITHUB_REPOSITORY_NAME" ]; then
-    DEPLOYMENT_NAME="$GITHUB_REPOSITORY_NAME"
-    print_info "Auto-detected deployment name from repository: $DEPLOYMENT_NAME"
-fi
-
-# Load configuration file if provided
+# Load configuration file first if provided (before auto-detection)
 if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
     # Determine environment from GitHub environment or namespace
     ENVIRONMENT="${GITHUB_ENVIRONMENT:-}"
@@ -77,6 +71,23 @@ if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
     fi
     
     parse_config_file "$CONFIG_FILE" "$ENVIRONMENT"
+fi
+
+# Auto-detect deployment name from repository if not provided (after config load)
+if [ -z "$DEPLOYMENT_NAME" ] && [ -n "$GITHUB_REPOSITORY_NAME" ]; then
+    DEPLOYMENT_NAME="$GITHUB_REPOSITORY_NAME"
+    print_info "Auto-detected deployment name from repository: $DEPLOYMENT_NAME"
+fi
+
+# Validate required parameters
+if [ -z "$DEPLOYMENT_NAME" ]; then
+    print_error "DEPLOYMENT_NAME is required but not set"
+    exit 1
+fi
+
+if [ -z "$NAMESPACE" ]; then
+    print_warning "NAMESPACE not set, using default"
+    NAMESPACE="default"
 fi
 
 # Set kubectl or oc command based on cluster type
