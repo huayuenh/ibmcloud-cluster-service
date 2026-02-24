@@ -93,17 +93,22 @@ substitute_template_vars() {
             if [ -n "$env_var" ]; then
                 KEY=$(echo "$env_var" | cut -d'=' -f1)
                 VALUE=$(echo "$env_var" | cut -d'=' -f2-)
-                env_yaml="${env_yaml}        - name: $KEY\n          value: \"$VALUE\"\n"
+                if [ -z "$env_yaml" ]; then
+                    env_yaml="        - name: $KEY"$'\n'"          value: \"$VALUE\""
+                else
+                    env_yaml="$env_yaml"$'\n'"        - name: $KEY"$'\n'"          value: \"$VALUE\""
+                fi
             fi
         done <<< "$ENV_VARS"
-        content="${content//\{\{ENV_VARS\}\}/$env_yaml}"
+        # Replace placeholder with actual env vars
+        content="${content//        \{\{ENV_VARS\}\}/$env_yaml}"
     else
-        # Remove the ENV_VARS placeholder if no env vars
-        content=$(echo "$content" | grep -v "{{ENV_VARS}}")
+        # Remove the env section if no env vars
+        content=$(echo "$content" | sed '/{{ENV_VARS}}/d' | sed '/^[[:space:]]*env:[[:space:]]*$/d')
     fi
     
     # Write to output file
-    echo -e "$content" > "$output_file"
+    printf '%s\n' "$content" > "$output_file"
 }
 
 if [ -n "$MANIFEST_TEMPLATE" ] && [ -f "$MANIFEST_TEMPLATE" ]; then
