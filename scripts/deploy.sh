@@ -63,6 +63,26 @@ fi
 # Set container name
 CONTAINER_NAME_ACTUAL="${CONTAINER_NAME:-$DEPLOYMENT_NAME}"
 
+# Auto-extract version from image tag if not provided
+if [ -z "$VERSION" ] && [ -n "$IMAGE" ]; then
+    # Extract tag from image (everything after the last colon)
+    VERSION=$(echo "$IMAGE" | grep -oP ':[^:]+$' | sed 's/^://' || echo "latest")
+    print_info "Auto-extracted version from image tag: $VERSION"
+fi
+VERSION="${VERSION:-latest}"
+
+# Auto-detect image pull secret from IBM Cloud if not provided
+if [ -z "$IMAGE_PULL_SECRET" ] && [ -n "$IBMCLOUD_API_KEY" ]; then
+    # Check if default IBM Cloud registry secret exists
+    DEFAULT_SECRET="all-icr-io"
+    if $CMD get secret "$DEFAULT_SECRET" -n "$NAMESPACE" &>/dev/null; then
+        IMAGE_PULL_SECRET="$DEFAULT_SECRET"
+        print_info "Auto-detected image pull secret: $IMAGE_PULL_SECRET"
+    else
+        print_info "No default IBM Cloud registry secret found, deployment will use default service account"
+    fi
+fi
+
 # Function to substitute variables in template
 substitute_template_vars() {
     local template_file=$1

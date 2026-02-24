@@ -116,6 +116,14 @@ inputs:
     required: false
     default: '256Mi'
   
+  image-pull-secret:
+    description: 'Image pull secret name (auto-detected for IBM Cloud if not provided)'
+    required: false
+  
+  version:
+    description: 'Version label for deployment (auto-extracted from image tag if not provided)'
+    required: false
+  
   env-vars:
     description: 'Environment variables in KEY=VALUE format, one per line'
     required: false
