@@ -71,6 +71,41 @@ substitute_template_vars() {
     # Read template
     local content=$(cat "$template_file")
     
+    # Detect and configure ingress if needed
+    local ingress_host=""
+    local ingress_secret=""
+    local ingress_annotations=""
+    
+    if [[ "$content" == *"{{INGRESS_HOST}}"* ]]; then
+        # Ingress is in template, need to configure it
+        if [ "$AUTO_INGRESS" = "true" ] || [ "$AUTO_INGRESS" = "True" ]; then
+            # Auto-detect IBM Cloud cluster ingress subdomain
+            print_info "Auto-detecting IBM Cloud cluster ingress subdomain..."
+            INGRESS_SUBDOMAIN=$(ibmcloud ks cluster get --cluster "$CLUSTER_NAME" --output json 2>/dev/null | jq -r '.ingressHostname // .ingress.hostname // empty' || echo "")
+            
+            if [ -n "$INGRESS_SUBDOMAIN" ]; then
+                ingress_host="${DEPLOYMENT_NAME}-${NAMESPACE}.${INGRESS_SUBDOMAIN}"
+                ingress_secret=$(ibmcloud ks cluster get --cluster "$CLUSTER_NAME" --output json 2>/dev/null | jq -r '.ingressSecretName // .ingress.secretName // empty' || echo "")
+                print_success "Auto-detected ingress host: $ingress_host"
+            else
+                print_warning "Could not auto-detect ingress subdomain"
+            fi
+        elif [ -n "$INGRESS_HOST" ]; then
+            ingress_host="$INGRESS_HOST"
+            print_info "Using provided ingress host: $ingress_host"
+        fi
+        
+        # Set ingress secret
+        if [ -z "$ingress_secret" ]; then
+            ingress_secret="${DEPLOYMENT_NAME}-tls"
+        fi
+        
+        # Build ingress annotations
+        if [ "$INGRESS_TLS" = "true" ] || [ "$INGRESS_TLS" = "True" ]; then
+            ingress_annotations="nginx.ingress.kubernetes.io/ssl-redirect: \"true\""
+        fi
+    fi
+    
     # Substitute variables
     content="${content//\{\{IMAGE\}\}/$IMAGE}"
     content="${content//\{\{DEPLOYMENT_NAME\}\}/$DEPLOYMENT_NAME}"
@@ -85,6 +120,9 @@ substitute_template_vars() {
     content="${content//\{\{RESOURCE_REQUESTS_MEMORY\}\}/$RESOURCE_REQUESTS_MEMORY}"
     content="${content//\{\{IMAGE_PULL_SECRET\}\}/${IMAGE_PULL_SECRET:-}}"
     content="${content//\{\{VERSION\}\}/${VERSION:-latest}}"
+    content="${content//\{\{INGRESS_HOST\}\}/$ingress_host}"
+    content="${content//\{\{INGRESS_SECRET\}\}/$ingress_secret}"
+    content="${content//\{\{INGRESS_ANNOTATIONS\}\}/$ingress_annotations}"
     
     # Handle environment variables
     if [ -n "$ENV_VARS" ]; then
@@ -125,6 +163,28 @@ if [ -n "$MANIFEST_TEMPLATE" ] && [ -f "$MANIFEST_TEMPLATE" ]; then
     # Apply the processed manifest
     $CMD apply -f "$TEMP_MANIFEST"
     handle_error $? "Failed to apply manifest template"
+    
+    # If ingress was configured in template, get the URL
+    if grep -q "kind: Ingress" "$TEMP_MANIFEST" 2>/dev/null; then
+        print_info "Ingress resource detected in template, waiting for it to be ready..."
+        sleep 5
+        
+        # Get ingress host from the applied resource
+        INGRESS_HOST_ACTUAL=$($CMD get ingress "$DEPLOYMENT_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.rules[0].host}' 2>/dev/null || echo "")
+        
+        if [ -n "$INGRESS_HOST_ACTUAL" ]; then
+            # Check if TLS is configured
+            TLS_ENABLED=$($CMD get ingress "$DEPLOYMENT_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.tls[0].hosts[0]}' 2>/dev/null || echo "")
+            
+            if [ -n "$TLS_ENABLED" ]; then
+                APP_URL="https://${INGRESS_HOST_ACTUAL}"
+            else
+                APP_URL="http://${INGRESS_HOST_ACTUAL}"
+            fi
+            
+            print_success "Ingress configured: $APP_URL"
+        fi
+    fi
     
     # Clean up
     rm -f "$TEMP_MANIFEST"

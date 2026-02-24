@@ -181,6 +181,9 @@ spec:
 - `{{IMAGE_PULL_SECRET}}` - Image pull secret name
 - `{{VERSION}}` - Version label
 - `{{ENV_VARS}}` - Environment variables (auto-formatted)
+- `{{INGRESS_HOST}}` - Ingress hostname (auto-detected or provided)
+- `{{INGRESS_SECRET}}` - TLS secret name for ingress
+- `{{INGRESS_ANNOTATIONS}}` - Ingress annotations (auto-generated based on settings)
 
 ### Deploy to IBM Cloud Kubernetes (Inline Configuration)
 
