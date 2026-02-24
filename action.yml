@@ -71,7 +71,7 @@ inputs:
   replicas:
     description: 'Number of replicas'
     required: false
-    default: '1'
+    default: '3'
   
   health-check-path:
     description: 'HTTP path for health check (e.g., /health, /ready). Leave empty or set to / to check root endpoint'
@@ -136,12 +136,12 @@ inputs:
   ingress-tls:
     description: 'Enable TLS for ingress'
     required: false
-    default: 'false'
+    default: 'true'
   
   auto-ingress:
     description: 'Automatically detect and configure IBM Cloud cluster ingress subdomain'
     required: false
-    default: 'false'
+    default: 'true'
   
 outputs:
   deployment-status:
