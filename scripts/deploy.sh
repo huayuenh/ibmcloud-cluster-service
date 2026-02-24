@@ -130,8 +130,11 @@ if [ -z "$NAMESPACE" ]; then
 fi
 
 # Set kubectl or oc command
-CMD="${CLUSTER_TYPE:+oc}"
-CMD="${CMD:-kubectl}"
+if [ "$CLUSTER_TYPE" = "openshift" ]; then
+    CMD="oc"
+else
+    CMD="kubectl"
+fi
 
 print_info "Using command: $CMD"
 print_info "Image: $IMAGE"
